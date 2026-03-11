@@ -55,7 +55,7 @@ export const queryHuggingFace = onRequest(
     }
 
     const modelId = "falan42/llama_lora_8b_medical_HealthcareMagictr2_gguf";
-    const url = `https://api-inference.huggingface.co/models/${modelId}`;
+    const url = "https://router.huggingface.co/hf-inference/models";
 
     try {
       logger.info("Querying Hugging Face model", {
@@ -71,6 +71,7 @@ export const queryHuggingFace = onRequest(
         },
         body: JSON.stringify({
           inputs: prompt,
+          model: modelId,
         }),
       });
 
