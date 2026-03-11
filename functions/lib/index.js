@@ -67,13 +67,22 @@ exports.queryHuggingFace = (0, https_1.onRequest)({
     }
     const { prompt } = request.body;
     if (!prompt) {
-        response.status(400).send("Prompt is required");
+        response.status(400).json({ error: "Prompt is required" });
         return;
     }
-    const apiKey = huggingFaceToken.value;
+    const apiKey = huggingFaceToken.value();
+    if (!apiKey) {
+        logger.error("HUGGING_FACE_TOKEN secret is not set");
+        response.status(500).json({ error: "API key not configured" });
+        return;
+    }
     const modelId = "falan42/llama_lora_8b_medical_HealthcareMagictr2_gguf";
     const url = `https://api-inference.huggingface.co/models/${modelId}`;
     try {
+        logger.info("Querying Hugging Face model", {
+            modelId,
+            hasPrompt: !!prompt,
+        });
         const hfResponse = await fetch(url, {
             method: "POST",
             headers: {
@@ -82,7 +91,6 @@ exports.queryHuggingFace = (0, https_1.onRequest)({
             },
             body: JSON.stringify({
                 inputs: prompt,
-                parameters: { max_new_tokens: 100 },
             }),
         });
         if (!hfResponse.ok) {
@@ -91,23 +99,42 @@ exports.queryHuggingFace = (0, https_1.onRequest)({
                 status: hfResponse.status,
                 body: errorText,
             });
-            response.status(hfResponse.status).send(errorText);
+            response.status(hfResponse.status).json({
+                error: `Hugging Face API error: ${errorText}`,
+            });
             return;
         }
         const data = await hfResponse.json();
+        logger.info("Hugging Face response received", { dataType: typeof data });
         let generatedText = "";
         if (Array.isArray(data) && data.length > 0) {
-            generatedText = data[0].generated_text || "";
+            if (typeof data[0] === "object" && data[0].generated_text) {
+                generatedText = data[0].generated_text;
+            }
+            else {
+                generatedText = String(data[0]);
+            }
+        }
+        else if (typeof data === "object" && data.generated_text) {
+            generatedText = data.generated_text;
+        }
+        else if (typeof data === "string") {
+            generatedText = data;
         }
         else if (data.error) {
-            response.status(500).send(`Model error: ${data.error}`);
+            response.status(500).json({ error: `Model error: ${data.error}` });
             return;
         }
         response.json({ generated_text: generatedText });
     }
     catch (error) {
-        logger.error("Error querying Hugging Face", error);
-        response.status(500).send("Internal server error");
+        logger.error("Error querying Hugging Face", { error: String(error) });
+        const errorMsg = error instanceof Error ?
+            error.message :
+            String(error);
+        response.status(500).json({
+            error: `Internal server error: ${errorMsg}`,
+        });
     }
 });
 //# sourceMappingURL=index.js.map
